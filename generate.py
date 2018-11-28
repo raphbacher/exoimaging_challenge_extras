@@ -14,8 +14,6 @@ def generate_fake_cubes(instruments=["sphere_irdis","nirc2"],N=2,orig_dir="fakec
     psf = vip.fits.open_fits('./data_sample/naco_betapic_psf.fits')
     plsc = vip.conf.VLT_NACO['plsc']
     vip.var.fit_2dgaussian(psf, crop=11, full_output=True, debug=False)
-    #fwhm = np.mean((4.92, 4.67))
-    bounds_flux = np.array([50, 90])
     for instru in instruments:
         for i in range(N):
             vip.fits.write_fits(os.path.join(orig_dir,instru+"_cube_clean_"+str(i+1)+".fits"),cube)
@@ -56,32 +54,38 @@ def inject_companions(instruments=["sphere_irdis","nirc2"],orig_dir="fakecubes",
                 
 
             nb_inj = np.random.randint(0,6)
-            
-            max_steps_fwhm = int(np.floor(np.minimum(cube.shape[-1],cube.shape[-2])/fwhm))
-            if fourD is True:
-                bounds_flux_hard = estimate_fluxes(cube, psf, (np.arange(3,max_steps_fwhm)*fwhm).astype(int), pa, fwhm, plsc, wavelengths=wl,min_adi_snr=1, max_adi_snr=3)
-                bounds_flux_soft = estimate_fluxes(cube, psf, (np.arange(3,max_steps_fwhm)*fwhm).astype(int), pa, fwhm, plsc, wavelengths=wl,min_adi_snr=3, max_adi_snr=5)
-            else:
-                bounds_flux_hard = estimate_fluxes(cube, psf, (np.arange(3,max_steps_fwhm)*fwhm).astype(int), pa, fwhm, plsc, wavelengths=None,min_adi_snr=1, max_adi_snr=3)
-                bounds_flux_soft = estimate_fluxes(cube, psf, (np.arange(3,max_steps_fwhm)*fwhm).astype(int), pa, fwhm, plsc, wavelengths=None,min_adi_snr=3, max_adi_snr=5)
-            
-            cubefc=cube #init
-            positions=[]
+            listDist = []
             for j in range(nb_inj):
                 regime = np.random.randint(0,2)
                 if regime == 0:
                     rad_dists=np.random.uniform(2.5*fwhm,6*fwhm)
                 else:
-                    rad_dists=np.random.uniform(6*fwhm,20*fwhm)
-                rad_dists = np.min([rad_dists,cube.shape[1]/2-2*fwhm,cube.shape[2]/2-2*fwhm]) #avoid going outside of the cube
+                    rad_dists=np.random.uniform(6*fwhm,10*fwhm)
+                #print(regime,rad_dists)
+                rad_dists = np.min([rad_dists,cube.shape[-1]/2-fwhm]) #avoid going outside of the cube
+                listDist.append(int(rad_dists))
+                
+            
+            #max_steps_fwhm = int(np.floor(np.minimum(cube.shape[-1],cube.shape[-2])/fwhm))
+            if fourD is True:
+                bounds_flux_hard = estimate_fluxes(cube, psf, listDist, pa, fwhm, plsc, wavelengths=wl,min_adi_snr=1, max_adi_snr=3)
+                bounds_flux_soft = estimate_fluxes(cube, psf, listDist , pa, fwhm, plsc, wavelengths=wl,min_adi_snr=3, max_adi_snr=5)
+            else:
+                bounds_flux_hard = estimate_fluxes(cube, psf, listDist, pa, fwhm, plsc, wavelengths=None,min_adi_snr=1, max_adi_snr=3)
+                bounds_flux_soft = estimate_fluxes(cube, psf, listDist, pa, fwhm, plsc, wavelengths=None,min_adi_snr=3, max_adi_snr=5)
+            
+            cubefc=cube #init
+            positions=[]
+            for j in range(nb_inj):
+                
+                rad_dists = listDist[j]
                 theta = np.random.uniform(0,360)
                 
-                dist_ind = np.minimum(np.maximum(int(rad_dists/fwhm),3),max_steps_fwhm)-3 # find closest distance index for in bound_fluxes
                 
                 if j%2==0: #one of two is drawn as difficult
-                    flux = np.random.uniform(bounds_flux_hard[0][dist_ind],bounds_flux_hard[1][dist_ind])
+                    flux = np.random.uniform(bounds_flux_hard[0][j],bounds_flux_hard[1][j])
                 else:
-                    flux = np.random.uniform(bounds_flux_soft[0][dist_ind],bounds_flux_soft[1][dist_ind])
+                    flux = np.random.uniform(bounds_flux_soft[0][j],bounds_flux_soft[1][j])
                 if fourD:
                     flux = np.ones_like(wl)*flux
                 
